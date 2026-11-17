@@ -153,22 +153,22 @@ if __name__ == '__main__':
     else:
         assert False, 'Missing key'
 
-# Confirming admission logic. The first two readers should enter before either exits. Then the first write should
-# exit before the second one enters. Then the final read.
-reader1 = threading.Thread(target=reader_test, args=(1, 'read'))
-reader2 = threading.Thread(target=reader_test, args=(2, 'read'))
-writer1 = threading.Thread(target=reader_test, args=(3, 'write'))
-writer2 = threading.Thread(target=reader_test, args=(4, 'write'))
-reader3 = threading.Thread(target=reader_test, args=(5, 'read'))
+    # Confirming admission logic. The first two readers should enter before either exits. Then the first write should
+    # exit before the second one enters. Then the final read.
+    reader1 = threading.Thread(target=reader_test, args=(1, 'read'))
+    reader2 = threading.Thread(target=reader_test, args=(2, 'read'))
+    writer1 = threading.Thread(target=reader_test, args=(3, 'write'))
+    writer2 = threading.Thread(target=reader_test, args=(4, 'write'))
+    reader3 = threading.Thread(target=reader_test, args=(5, 'read'))
 
-reader1.start()
-reader2.start()
-writer1.start()
-writer2.start()
-reader3.start()
+    reader1.start()
+    reader2.start()
+    writer1.start()
+    writer2.start()
+    reader3.start()
 
-reader1.join()
-reader2.join()
-writer1.join()
-writer2.join()
-reader3.join()
+    reader1.join()
+    reader2.join()
+    writer1.join()
+    writer2.join()
+    reader3.join()
