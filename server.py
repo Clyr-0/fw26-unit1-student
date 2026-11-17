@@ -24,6 +24,7 @@ class Server:
         # Starts the server by assigning the IP and port, then leaves the socket to listen for incoming connections.
         self.server_sock.bind(('0.0.0.0', 9090))
         self.server_sock.listen()
+        self.server_sock.settimeout(1.0)
 
         # Printout according the assingment spec. __init__ could theoretically take a max workers arguement,
         # and start_server could take a tuple for the binding, but since all values are hard coded this works.
@@ -36,25 +37,23 @@ class Server:
         self.interface.join()
         self.server.join()
         self.executor.shutdown(wait=True)
+        print(f'Server shutting down...')
 
     def accept_client(self):
         # Will loop as well. Will accept the connection, assign a worker, and call process client.
-        try:
-            while not self.shutdown_event.is_set():
-                # This should probably have try/except logic for the errors that may come up.
+        while not self.shutdown_event.is_set():
+            # This should probably have try/except logic for the errors that may come up.
+            try:
+                # And after a silly amount of debugging I proved myself right. Shutdown wasn't working as
+                # intended because in the first iteration socket.accept waits indefinitely. Could not tell
+                # you why closing the socket doesn't stop this. Adding the timeout timer returns control
+                # at regular intervals allowing the event check.
                 client_sock, client_addr = self.server_sock.accept()
-                self.executor.submit(self.process_client, client_sock)
-                print(f'accepted client {client_sock}')
-        except OSError:
-            # Since we're using the bash cli provided by the dev container/vscode, I wanted a way to shutdown the
-            # server without needing to kill the terminal. The way the threads are set up makes it so that when
-            # interface sees the command, the event is set and then the logic for server_interface() ends, causing
-            # the thread to finish. The accept thread is blocked by server.sock.accept(), which means it won't see
-            # the event. So we just shoot the socket on the way out, and catch the error.
-            if self.shutdown_event.is_set():
-                pass
-            else:
-                raise
+            except socket.timeout:
+                continue
+
+            self.executor.submit(self.process_client, client_sock)
+            print(f'accepted client {client_sock}')
 
     def process_client(self, client):
         # Loop needs to do a few things. Take a message. Process the request, perform the request, then respond
@@ -77,9 +76,9 @@ class Server:
     def process_request(self, message):
 
         try:
-            assert 'action' in message
-            action = message.get('action')
-            assert action in ['PUT', 'GET', 'ENQUEUE', 'DEQUEUE']
+            action = message['action']
+            if action not in ['PUT', 'GET', 'ENQUEUE', 'DEQUEUE']:
+                return f"{action} is not a valid action."
             # Determine and perform the action.
             if action == "GET":
                 return self.storage.get(message['key'])
@@ -90,13 +89,16 @@ class Server:
             elif action == 'DEQUEUE':
                 return self.task_queue.dequeue()
         except KeyError:
+            # Deals with the message not supplying an action, key, or task field.
+            if 'action' not in message:
+                return f"No action field."
+            if 'key' not in message:
+                return f"No key field."
+            if 'task' not in message:
+                return f"No task field."
             # Deals with the KeyError that KeyValueStorage.get() can raise.
-            return f'Key {message['key']} does not exist.'
-        except AssertionError:
-            if 'action' in message:
-                return f'{action} is not a valid action.'
-            else:
-                return f'No action field.'
+            if 'key' in message:
+                return f"Key {message['key']} does not exist."
 
     def server_interface(self):
         while not self.shutdown_event.is_set():
@@ -104,12 +106,6 @@ class Server:
 
             if command.lower() == "shutdown":
                 self.shutdown_event.set()
-        # This throws an OS error accept needs to handle
-        self.server_sock.close()
-
-
-# A flag to distinguish between testing or not. Set to true to see use the code that tests the server implementation
-testing = True
 
 
 def testing():
@@ -126,7 +122,16 @@ def testing():
     send_message(client, test_dict3)
     send_message(client, test_dict4)
 
+    client.close()
+
 
 if __name__ == '__main__':
+    # A flag to distinguish between testing or not. Set to true to see use the code that tests the server
+    # implementation
+    run_test = True
+
     server = Server()
     server.start_server()
+
+    if testing:
+        testing()
